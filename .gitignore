@@ -1,7 +1,7 @@
-### Step 7: Create .gitignore
-```gitignore
-# Environment variables
+# Environment variables (NEVER COMMIT)
 .env
+.env.local
+.env.*.local
 
 # Python
 __pycache__/
@@ -13,13 +13,14 @@ env/
 venv/
 .venv/
 
-# Storage (don't commit uploaded documents)
+# Storage (uploaded documents)
 storage/
 
-# IDE
+# IDE files
 .vscode/
 .idea/
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
+EOF
