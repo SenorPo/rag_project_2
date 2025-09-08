@@ -1,168 +1,82 @@
-# lightweight_api.py - For Replit deployment
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from pydantic import BaseModel
 import json
 import os
-from typing import List, Dict
-import re
+from typing import List, Dict, Optional
 import google.generativeai as genai
-from dotenv import load_dotenv
 
-load_dotenv()
+app = FastAPI()
 
-app = FastAPI(title="RAG Chatbot - Hybrid API", version="1.0.0")
-
-# Global variables
-vector_db = None
-documents = []
+# In-memory storage for conversation context
+conversations: Dict[str, List[Dict]] = {}
 
 
-def load_vector_database():
-    """Load the exported vector database"""
-    global vector_db, documents
-
-    try:
-        if not os.path.exists("vector_database.json"):
-            print("No vector_database.json found. Please upload the exported database.")
-            return False
-
-        with open("vector_database.json", "r", encoding="utf-8") as f:
-            vector_db = json.load(f)
-
-        documents = vector_db.get("documents", [])
-        print(f"Vector database loaded: {len(documents)} documents")
-        return True
-
-    except Exception as e:
-        print(f"Error loading vector database: {e}")
-        return False
-
-
-def simple_text_search(query: str, top_k: int = 3) -> List[Dict]:
-    """Simple keyword-based search (replace with proper vector search if needed)"""
-    if not documents:
-        return []
-
-    query_lower = query.lower()
-    query_words = set(re.findall(r'\w+', query_lower))
-
-    # Score documents based on keyword overlap
-    scored_docs = []
-    for doc in documents:
-        text_lower = doc["text"].lower()
-        text_words = set(re.findall(r'\w+', text_lower))
-
-        # Calculate simple overlap score
-        overlap = len(query_words.intersection(text_words))
-        if overlap > 0:
-            score = overlap / len(query_words)
-            scored_docs.append({
-                "text": doc["text"],
-                "score": score,
-                "metadata": doc.get("metadata", {})
-            })
-
-    # Sort by score and return top_k
-    scored_docs.sort(key=lambda x: x["score"], reverse=True)
-    return scored_docs[:top_k]
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the application"""
-    # Configure Gemini
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        print("WARNING: GOOGLE_API_KEY not set")
-    else:
-        genai.configure(api_key=api_key)
-
-    # Load vector database
-    load_vector_database()
-
-
-@app.get("/")
-async def root():
-    return {"message": "RAG Chatbot API - Hybrid Mode", "status": "running"}
-
-
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "database_loaded": vector_db is not None,
-        "document_count": len(documents) if documents else 0
-    }
+class ChatMessage(BaseModel):
+    message: str
+    session_id: Optional[str] = "default"
 
 
 @app.post("/chat")
-async def chat_endpoint(message: dict):
-    """Chat endpoint using exported vector database"""
+async def chat_endpoint(chat_request: ChatMessage):
     try:
-        if not vector_db:
-            raise HTTPException(status_code=503, detail="Vector database not loaded")
+        session_id = chat_request.session_id
+        user_message = chat_request.message
 
-        query = message.get("message", "").strip()
-        if not query:
-            raise HTTPException(status_code=400, detail="Empty message")
+        # Get conversation history for this session
+        if session_id not in conversations:
+            conversations[session_id] = []
 
-        # Search for relevant documents
-        relevant_docs = simple_text_search(query, top_k=3)
+        conversation = conversations[session_id]
 
-        if not relevant_docs:
-            # No relevant documents found, use general response
-            context = "No specific documents found for this query."
-        else:
-            # Build context from relevant documents
-            context_parts = []
-            for i, doc in enumerate(relevant_docs, 1):
-                context_parts.append(f"Document {i} (Score: {doc['score']:.2f}):\n{doc['text'][:500]}...")
-            context = "\n\n".join(context_parts)
+        # Search vector database
+        relevant_docs = search_docs(user_message)
+        context = "\n".join([d["text"][:300] for d in relevant_docs])
 
-        # Generate response with Gemini
-        model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+        # Build conversation context (last 5 messages)
+        conversation_context = ""
+        for msg in conversation[-5:]:  # Last 5 exchanges
+            conversation_context += f"User: {msg['user']}\nAssistant: {msg['assistant']}\n\n"
 
-        prompt = f"""You are a helpful assistant that answers questions based on provided documents.
+        # Create enhanced prompt with context
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        prompt = f"""Previous conversation:
+{conversation_context}
 
 Context from documents:
 {context}
 
-User question: {query}
+Current question: {user_message}
 
-Instructions:
-- Answer based primarily on the provided context
-- If the context doesn't contain relevant information, say so clearly
-- Be concise and helpful
-- If no documents were found, provide a general helpful response
-
-Answer:"""
+Answer the current question considering both the document context and previous conversation:"""
 
         response = model.generate_content(prompt)
+        assistant_response = response.text
+
+        # Store this exchange
+        conversation.append({
+            "user": user_message,
+            "assistant": assistant_response
+        })
+
+        # Keep only last 10 exchanges to manage memory
+        if len(conversation) > 10:
+            conversation = conversation[-10:]
+            conversations[session_id] = conversation
 
         return {
-            "response": response.text,
-            "sources_found": len(relevant_docs),
-            "context_used": bool(relevant_docs)
+            "response": assistant_response,
+            "session_id": session_id
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+        return {"error": str(e)}
 
 
-@app.get("/database-info")
-async def database_info():
-    """Get information about the loaded database"""
-    if not vector_db:
-        return {"error": "No database loaded"}
-
+@app.get("/chat/history/{session_id}")
+async def get_chat_history(session_id: str):
+    """Get conversation history for a session"""
     return {
-        "total_documents": len(documents),
-        "export_version": vector_db.get("export_version", "unknown"),
-        "sample_document": documents[0]["text"][:200] + "..." if documents else None
+        "session_id": session_id,
+        "messages": conversations.get(session_id, []),
+        "message_count": len(conversations.get(session_id, []))
     }
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)

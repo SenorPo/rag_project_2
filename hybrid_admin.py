@@ -2,7 +2,7 @@
 import streamlit as st
 import sys
 from pathlib import Path
-from export_vector_db import export_vector_database
+from export_vector_db import export_with_embeddings
 
 # Add current directory to path for imports
 sys.path.append(str(Path(__file__).parent))
@@ -33,7 +33,7 @@ def hybrid_admin_interface():
 
         if st.button("🚀 Export Vector Database", type="primary"):
             with st.spinner("Exporting vector database..."):
-                if export_vector_database():
+                if export_with_embeddings():
                     st.success("✅ Export successful! Upload 'vector_database.json' to Replit")
                 else:
                     st.error("❌ Export failed. Check console for details.")
