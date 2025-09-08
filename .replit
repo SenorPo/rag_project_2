@@ -1,5 +1,9 @@
-run = "python lightweight_api.py"
+run = "python api_main.py"
 modules = ["python-3.10"]
 
-[nix]
-channel = "stable-25_05"
+[deployment]
+run = ["sh", "-c", "python api_main.py"]
+
+[[ports]]
+localPort = 8000
+externalPort = 80
