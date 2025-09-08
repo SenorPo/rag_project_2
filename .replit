@@ -1,1 +1,15 @@
-run = "python lightweight_api.py"
+run = ["python3", "lightweight_api.py"]
+modules = ["python-3.10"]
+
+[deployment]
+run = ["python3", "lightweight_api.py"]
+
+[nix]
+packages = ["glibcLocales", "libxcrypt"]
+
+[[ports]]
+localPort = 8000
+externalPort = 80
+
+[agent]
+expertMode = true
