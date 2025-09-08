@@ -1,26 +1,114 @@
-# Environment variables (NEVER COMMIT)
+# Environment variables (CRITICAL - never commit API keys)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
 .venv/
 
-# Storage (uploaded documents)
+# Storage and data (for laptop development)
 storage/
+documents/
+uploads/
+data/
+*.db
+*.sqlite
+*.sqlite3
 
-# IDE files
+# Vector database files (only commit the exported JSON)
+vector_store/
+index_store/
+docstore/
+graph_store/
+# Keep the exported file for Replit
+!vector_database.json
+
+# ML model caches (prevent large downloads)
+.cache/
+*.pkl
+*.pickle
+models/
+transformers_cache/
+sentence_transformers/
+
+# IDE and editor files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter notebooks (if any)
+.ipynb_checkpoints
+*.ipynb
+
+# Logs
+*.log
+logs/
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-EOF
+
+# Replit specific
+.replit_folder/
+.upm/
+.breakpoints
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Large files that shouldn't be in git
+*.bin
+*.model
+*.weights
+*.h5
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Local configuration
+config.local.py
+settings.local.py
