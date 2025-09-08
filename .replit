@@ -1,1 +1,5 @@
 run = "python lightweight_api.py"
+modules = ["python-3.10"]
+
+[nix]
+channel = "stable-25_05"
