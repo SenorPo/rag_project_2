@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "rag-chatbot"
+version = "0.1.0"
+description = "RAG Chatbot with Gemini and Sentence Transformers"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+llama-index = "^0.9.8"
+google-generativeai = "^0.3.1"
+sentence-transformers = "^2.2.2"
+python-dotenv = "^1.0.0"
+python-multipart = "^0.0.6"
+streamlit = "^1.28.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
