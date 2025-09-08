@@ -1,9 +1,15 @@
-run = "python api_main.py"
+run = ["python3", "lightweight_api.py"]
 modules = ["python-3.10"]
 
 [deployment]
-run = ["sh", "-c", "python api_main.py"]
+run = ["python3", "lightweight_api.py"]
+
+[nix]
+packages = ["glibcLocales", "libxcrypt"]
 
 [[ports]]
 localPort = 8000
 externalPort = 80
+
+[agent]
+expertMode = true
