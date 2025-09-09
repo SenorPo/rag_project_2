@@ -1,3 +1,10 @@
+"""
+Lightweight RAG API - Hybrid Approach
+- Uses Sentence Transformers (all-mpnet-base-v2) for query embeddings
+- Uses Gemini only for text generation (LLM responses)
+- Optimized for Render deployment
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -5,7 +12,7 @@ import json
 import os
 import re
 from typing import List, Dict, Optional
-import google.generativeai as genai
+from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -27,6 +34,7 @@ app.add_middleware(
 vector_db = None
 documents = []
 conversations: Dict[str, List[Dict]] = {}
+embedding_model = None
 
 class ChatMessage(BaseModel):
     message: str
@@ -145,31 +153,30 @@ def keyword_search(query: str, top_k: int = 3) -> List[Dict]:
     scored_docs.sort(key=lambda x: x["score"], reverse=True)
     return scored_docs[:top_k]
 
-def get_gemini_embedding(text: str) -> Optional[List[float]]:
-    """Get embedding using Gemini API (if available)"""
+def get_sentence_transformer_embedding(text: str) -> Optional[List[float]]:
+    """Get embedding using Sentence Transformers"""
+    global embedding_model
     try:
-        result = genai.embed_content(
-            model="models/embedding-001",
-            content=text,
-            task_type="retrieval_query"
-        )
-        return result['embedding']
+        if embedding_model is None:
+            print("Loading Sentence Transformer model...")
+            embedding_model = SentenceTransformer('all-mpnet-base-v2')
+            print("Model loaded successfully!")
+        
+        embedding = embedding_model.encode(text, convert_to_tensor=False)
+        return embedding.tolist()
     except Exception as e:
-        print(f"Gemini embedding error: {e}")
+        print(f"Sentence Transformer embedding error: {e}")
         return None
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application"""
-    # Configure Gemini
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        print("WARNING: GOOGLE_API_KEY not set")
-    else:
-        genai.configure(api_key=api_key)
-
     # Load vector database
     load_vector_database()
+    
+    # Initialize Sentence Transformer model
+    print("Initializing Sentence Transformer model...")
+    get_sentence_transformer_embedding("initialization test")
 
 @app.get("/health")
 async def health_check():
@@ -180,7 +187,10 @@ async def health_check():
         "database_loaded": vector_db is not None,
         "document_count": len(documents) if documents else 0,
         "documents_with_embeddings": docs_with_embeddings,
-        "search_capability": "vector" if docs_with_embeddings > 0 else "keyword"
+        "search_capability": "vector" if docs_with_embeddings > 0 else "keyword",
+        "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+        "llm_model": "gemini-1.5-flash",
+        "deployment": "render"
     }
 
 @app.post("/chat")
@@ -199,7 +209,7 @@ async def chat_endpoint(chat_request: ChatMessage):
         conversation = conversations[session_id]
 
         # Try to get query embedding for vector search
-        query_embedding = get_gemini_embedding(user_message)
+        query_embedding = get_sentence_transformer_embedding(user_message)
 
         if query_embedding:
             # Use vector search if we have embeddings
@@ -219,6 +229,14 @@ async def chat_endpoint(chat_request: ChatMessage):
             conversation_context += f"User: {msg['user']}\nAssistant: {msg['assistant']}\n\n"
 
         # Create enhanced prompt with context
+        import google.generativeai as genai
+        
+        # Configure Gemini for text generation only
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            return {"error": "GOOGLE_API_KEY not set for text generation"}
+        
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
 
         if conversation_context:
@@ -296,7 +314,7 @@ async def test_search(query: str = "tea benefits"):
     keyword_results = keyword_search(query, top_k=3)
 
     # Try vector search if embeddings available
-    query_embedding = get_gemini_embedding(query)
+    query_embedding = get_sentence_transformer_embedding(query)
     if query_embedding:
         vector_results = vector_similarity_search(query_embedding, top_k=3)
     else:
